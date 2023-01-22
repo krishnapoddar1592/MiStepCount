@@ -175,16 +175,6 @@ public class StepServiceLocation extends Service implements SensorEventListener 
         return segments;
     }
 
-    private MappedByteBuffer loadModelFile(Context context) throws IOException {
-        File file = new File(context.getFilesDir(), "ml/mistepcount.tflite");
-        FileInputStream inputStream = new FileInputStream(file);
-        FileChannel fileChannel = inputStream.getChannel();
-        long startOffset = 0;
-        long declaredLength = fileChannel.size();
-        return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
-    }
-
-
     public static int argmax(float[] array) {
         int index = 0;
         float max = array[0];
