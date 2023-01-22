@@ -1,12 +1,18 @@
 package com.example.mistepcount;
 
 import android.Manifest;
+
+import org.tensorflow.lite.DataType;
+//import org.tensorflow.lite.Interpreter;
+import org.tensorflow.lite.support.tensorbuffer.TensorBuffer;
+
 import android.app.Activity;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.AssetFileDescriptor;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -22,6 +28,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
 
+import com.example.mistepcount.ml.Mistepcount;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
@@ -31,11 +38,18 @@ import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
 import java.text.DecimalFormat;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -43,7 +57,7 @@ import java.util.concurrent.ExecutionException;
 
 public class StepServiceLocation extends Service implements SensorEventListener {
     int brand=-1;
-    public static final int SPEED_THRESHOLD=10;
+    public static final int SPEED_THRESHOLD=13;
     private Location mLocation;
     public Location previousLocation;
     public int sum = 0;
@@ -96,10 +110,10 @@ public class StepServiceLocation extends Service implements SensorEventListener 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         HashMap<String,Integer> brands =new HashMap<>();
-        brands.put("Redmi",0);
+        brands.put("redmi",0);
         brands.put("realme",1);
-        brands.put("Oneplus",2);
-        brands.put("Samsung",3);
+        brands.put("oneplus",2);
+        brands.put("samsung",3);
 
         String brandName = android.os.Build.BRAND;
         brandName=brandName.toLowerCase(Locale.ROOT);
@@ -126,7 +140,11 @@ public class StepServiceLocation extends Service implements SensorEventListener 
 
             public void run() {
 //                Toast.makeText(getApplicationContext(), "location", Toast.LENGTH_SHORT).show();
-                sum = sum + onPassDataToJNIButtonClicked();
+                try {
+                    sum = sum + onPassDataToJNIButtonClicked();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
                 //                sum=onPassDataToJNIButtonClicked();
 
                 try {
@@ -142,25 +160,151 @@ public class StepServiceLocation extends Service implements SensorEventListener 
         }, delay);
         return START_STICKY;
     }
+    public ArrayList<float[][]> createSegments(List<List<Double>> acc, int timeSteps, int stepDistance) {
+        final int N_FEATURES = 3;
+        ArrayList<float[][]> segments = new ArrayList<>();
+        for (int i = 0; i < acc.size() - timeSteps; i += stepDistance) {
+            float[][] segment = new float[timeSteps][N_FEATURES];
+            for (int j = 0; j < timeSteps; j++) {
+                segment[j][0] = acc.get(i + j).get(0).floatValue();
+                segment[j][1] = acc.get(i + j).get(1).floatValue();
+                segment[j][2] = acc.get(i + j).get(2).floatValue();
+            }
+            segments.add(segment);
+        }
+        return segments;
+    }
 
-    public int onPassDataToJNIButtonClicked() {
+    private MappedByteBuffer loadModelFile(Context context) throws IOException {
+        File file = new File(context.getFilesDir(), "ml/mistepcount.tflite");
+        FileInputStream inputStream = new FileInputStream(file);
+        FileChannel fileChannel = inputStream.getChannel();
+        long startOffset = 0;
+        long declaredLength = fileChannel.size();
+        return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
+    }
+
+
+    public static int argmax(float[] array) {
+        int index = 0;
+        float max = array[0];
+        for (int i = 1; i < array.length; i++) {
+            if (array[i] > max) {
+                index = i;
+                max = array[i];
+            }
+        }
+        return index;
+    }
+    public int onPassDataToJNIButtonClicked() throws IOException {
         // Temp data which passing to JNI
+        String[] labels={"Downstairs", "Jogging", "Sitting", "Standing", "Upstairs", "Walking"};
         rmsSize=rms.size();
         AccSize+=rmsSize;
         System.out.println("reaches:" +rmsSize);
+        ArrayList<float[][]> x_new=createSegments(acc,128,32);
         Toast.makeText(getApplicationContext(), String.valueOf(rmsSize), Toast.LENGTH_SHORT).show();
         double[] tmpArray =new double[rmsSize];
         for(int i =0; i<rmsSize ;i++){
             tmpArray[i]=rms.get(i);
         }
         rms.clear();
-//        acc.clear();
+        acc.clear();
         int tmpInt = tmpArray.length;
 
 
         // Pass data & get error code
         //        System.out.println("Success"+returnValue);
         if(rmsSize>0) {
+//            try{
+//                Interpreter interpreter = new Interpreter(loadModelFile(getApplicationContext()));
+//                // Allocate memory for the model
+//                interpreter.allocateTensors();
+//
+//                // Get input and output tensors
+//                int inputTensorIndex = interpreter.getInputTensorCount() - 1;
+//                int outputTensorIndex = interpreter.getOutputTensorCount() - 1;
+//                System.out.println(x_new.size());
+//                float[][][] inputData = new float[x_new.size()][][];
+//                for (int i = 0; i < x_new.size(); i++) {
+//                    inputData[i] = x_new.get(i);
+//                }
+//
+//                float[][] outputData = new float[1][];
+//
+//                // Run the Tflite model on the input data
+//                interpreter.run(inputData, outputData);
+//
+//                // Find the index of the highest probability in the output data
+
+//                for (int i = 0; i < x_new.size(); i++) {
+//                    int predictedClass = 0;
+//                    float maxProb = 0;
+//                    for (int j = 0; j < outputData[0].length; j++) {
+//                        if (outputData[i][j] > maxProb) {
+//                            maxProb = outputData[i][j];
+//                            predictedClass = j;
+//                        }
+//                    }
+//                    y_classes[i] = predictedClass;
+//                }
+//                System.out.println(Arrays.toString(y_classes));
+////                Toast.makeText(getApplicationContext(), String.valueOf(labels[predictedClass]), Toast.LENGTH_SHORT).show();
+////                if(predictedClass!=2 && predictedClass!=3){
+////                    return nativeLib.passingDataToJni(tmpArray, tmpInt, brand);
+////                }
+////                else{
+////                    return 0;
+////                }
+//            }catch (Exception e){
+            try {
+                System.out.println("htrhr");
+                Mistepcount model = Mistepcount.newInstance(getApplicationContext());
+                int[]y_classes = new int[x_new.size()];
+                // Creates inputs for reference.
+                System.out.println("fergergf");
+                // Convert X_train[0] to the correct shape and format
+                for (int i = 0; i < x_new.size(); i++) {
+                    TensorBuffer inputFeature0 = TensorBuffer.createFixedSize(new int[]{1, 128, 3}, DataType.FLOAT32);
+//                    inputFeature0.loadBuffer();
+                    float[][][] inputData = {x_new.get(i)};
+                    // Convert x_new to ByteBuffer
+                    int bytes = inputData.length * inputData[0].length * inputData[0][0].length * 4; // 4 bytes per float
+                    ByteBuffer byteBuffer = ByteBuffer.allocateDirect(bytes);
+                    byteBuffer.order(ByteOrder.nativeOrder());
+                    for (int a = 0; a < inputData.length; a++) {
+                        for (int j = 0; j < inputData[a].length; j++) {
+                            for (int k = 0; k < inputData[a][j].length; k++) {
+                                byteBuffer.putFloat(inputData[a][j][k]);
+                            }
+                        }
+                    }
+                    byteBuffer.rewind();
+
+                    // Load the ByteBuffer into inputFeature0
+                    inputFeature0.loadBuffer(byteBuffer);
+//                    inputFeature0.loadArray(inputData);
+                    System.out.println("vfvvfv");
+                    // Runs model inference and gets result.
+                    Mistepcount.Outputs outputs = model.process(inputFeature0);
+                    System.out.println("fwefef");
+                    TensorBuffer outputFeature0 = outputs.getOutputFeature0AsTensorBuffer();
+                    System.out.println("fevefvfv");
+                    // Find the index of the highest probability in the output data
+                    float[] outputData = outputFeature0.getFloatArray();
+                    int y_class = argmax(outputData);
+                    y_classes[i]=y_class;
+                }
+                System.out.println(Arrays.toString(y_classes));
+
+                // Releases model resources if no longer used.
+                model.close();
+            } catch (IOException e) {
+
+                Toast.makeText(getApplicationContext(), e.getMessage(), Toast.LENGTH_SHORT).show();
+                System.out.println(e.getMessage());
+            }
+
             return nativeLib.passingDataToJni(tmpArray, tmpInt, brand);
         }
         else{

@@ -71,7 +71,7 @@ Java_com_example_mistepcount_NativeLibraryLoc_passingDataToJni(JNIEnv *env,
     double cutoffFrequency=0 ;  // Hz
     double sampleRate=0 ;
 
-    if(brand ==0|| brand ==2 || brand ==3){
+    if(brand ==0|| brand ==2){
          stdDevthreshold = 0.8;  // Change this value to adjust the sensitivity of the heuristic
          cutoffFrequency = 1.009;  // Hz
          sampleRate = 86.0;
@@ -81,10 +81,10 @@ Java_com_example_mistepcount_NativeLibraryLoc_passingDataToJni(JNIEnv *env,
         cutoffFrequency = 0.78;  // Hz
         sampleRate = 40.0;
     }
-    else{
+    else if(brand ==3){
         stdDevthreshold = 0.8;  // Change this value to adjust the sensitivity of the heuristic
-        cutoffFrequency = 0.78;  // Hz
-        sampleRate = 40.0;
+        cutoffFrequency = 1.2;  // Hz
+        sampleRate = 150.0;
     }
 
 //     Calculate the standard deviation of the input data

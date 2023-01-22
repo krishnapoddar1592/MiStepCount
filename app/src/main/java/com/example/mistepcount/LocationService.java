@@ -8,6 +8,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.IBinder;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
@@ -77,6 +78,7 @@ public class LocationService extends Service {
 
     private void storeSpeed() {
         SharedPreferences.Editor editor = sharedPreferences.edit();
+//        Toast.makeText(getApplicationContext(), String.valueOf(speed), Toast.LENGTH_SHORT).show();
         editor.putFloat("speed", (float) speed);
         editor.apply();
     }
