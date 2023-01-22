@@ -201,7 +201,6 @@ public class StepServiceLocation extends Service implements SensorEventListener 
         String[] labels={"Downstairs", "Jogging", "Sitting", "Standing", "Upstairs", "Walking"};
         rmsSize=rms.size();
         AccSize+=rmsSize;
-        System.out.println("reaches:" +rmsSize);
         ArrayList<float[][]> x_new=createSegments(acc,128,32);
         Toast.makeText(getApplicationContext(), String.valueOf(rmsSize), Toast.LENGTH_SHORT).show();
         double[] tmpArray =new double[rmsSize];
@@ -213,56 +212,11 @@ public class StepServiceLocation extends Service implements SensorEventListener 
         int tmpInt = tmpArray.length;
 
 
-        // Pass data & get error code
-        //        System.out.println("Success"+returnValue);
         if(rmsSize>0) {
-//            try{
-//                Interpreter interpreter = new Interpreter(loadModelFile(getApplicationContext()));
-//                // Allocate memory for the model
-//                interpreter.allocateTensors();
-//
-//                // Get input and output tensors
-//                int inputTensorIndex = interpreter.getInputTensorCount() - 1;
-//                int outputTensorIndex = interpreter.getOutputTensorCount() - 1;
-//                System.out.println(x_new.size());
-//                float[][][] inputData = new float[x_new.size()][][];
-//                for (int i = 0; i < x_new.size(); i++) {
-//                    inputData[i] = x_new.get(i);
-//                }
-//
-//                float[][] outputData = new float[1][];
-//
-//                // Run the Tflite model on the input data
-//                interpreter.run(inputData, outputData);
-//
-//                // Find the index of the highest probability in the output data
-
-//                for (int i = 0; i < x_new.size(); i++) {
-//                    int predictedClass = 0;
-//                    float maxProb = 0;
-//                    for (int j = 0; j < outputData[0].length; j++) {
-//                        if (outputData[i][j] > maxProb) {
-//                            maxProb = outputData[i][j];
-//                            predictedClass = j;
-//                        }
-//                    }
-//                    y_classes[i] = predictedClass;
-//                }
-//                System.out.println(Arrays.toString(y_classes));
-////                Toast.makeText(getApplicationContext(), String.valueOf(labels[predictedClass]), Toast.LENGTH_SHORT).show();
-////                if(predictedClass!=2 && predictedClass!=3){
-////                    return nativeLib.passingDataToJni(tmpArray, tmpInt, brand);
-////                }
-////                else{
-////                    return 0;
-////                }
-//            }catch (Exception e){
             try {
-                System.out.println("htrhr");
                 Mistepcount model = Mistepcount.newInstance(getApplicationContext());
                 int[]y_classes = new int[x_new.size()];
                 // Creates inputs for reference.
-                System.out.println("fergergf");
                 // Convert X_train[0] to the correct shape and format
                 for (int i = 0; i < x_new.size(); i++) {
                     TensorBuffer inputFeature0 = TensorBuffer.createFixedSize(new int[]{1, 128, 3}, DataType.FLOAT32);
@@ -283,13 +237,9 @@ public class StepServiceLocation extends Service implements SensorEventListener 
 
                     // Load the ByteBuffer into inputFeature0
                     inputFeature0.loadBuffer(byteBuffer);
-//                    inputFeature0.loadArray(inputData);
-                    System.out.println("vfvvfv");
                     // Runs model inference and gets result.
                     Mistepcount.Outputs outputs = model.process(inputFeature0);
-                    System.out.println("fwefef");
                     TensorBuffer outputFeature0 = outputs.getOutputFeature0AsTensorBuffer();
-                    System.out.println("fevefvfv");
                     // Find the index of the highest probability in the output data
                     float[] outputData = outputFeature0.getFloatArray();
                     int y_class = argmax(outputData);
@@ -326,7 +276,6 @@ public class StepServiceLocation extends Service implements SensorEventListener 
          SharedPreferences locSp= getApplicationContext().getSharedPreferences("com.example.mistepcount.locationservice", Context.MODE_PRIVATE);
         double speed=locSp.getFloat("speed",0);
 
-//        System.out.println(speed);
 //        Toast.makeText(getApplicationContext(), String.valueOf(speed), Toast.LENGTH_SHORT).show();
         if (speed<=SPEED_THRESHOLD) {
             Instant current =Instant.now();
