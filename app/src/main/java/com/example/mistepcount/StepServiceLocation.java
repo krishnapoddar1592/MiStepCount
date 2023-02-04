@@ -2,9 +2,6 @@ package com.example.mistepcount;
 
 import android.Manifest;
 
-import org.tensorflow.lite.DataType;
-//import org.tensorflow.lite.Interpreter;
-import org.tensorflow.lite.support.tensorbuffer.TensorBuffer;
 
 import android.app.Activity;
 import android.app.Service;
@@ -28,7 +25,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
 
-import com.example.mistepcount.ml.Mistepcount;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
@@ -50,9 +46,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
 public class StepServiceLocation extends Service implements SensorEventListener {
@@ -74,6 +72,7 @@ public class StepServiceLocation extends Service implements SensorEventListener 
     Sensor accelerometer;
     int rmsSize = 0;
     int AccSize = 0;
+    private TensorFlowClassifier classifier;
 
 
     /**
@@ -109,6 +108,7 @@ public class StepServiceLocation extends Service implements SensorEventListener 
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        classifier = new TensorFlowClassifier(getApplicationContext());
         HashMap<String,Integer> brands =new HashMap<>();
         brands.put("redmi",0);
         brands.put("realme",1);
@@ -160,20 +160,25 @@ public class StepServiceLocation extends Service implements SensorEventListener 
         }, delay);
         return START_STICKY;
     }
-    public ArrayList<float[][]> createSegments(List<List<Double>> acc, int timeSteps, int stepDistance) {
+    public ArrayList<ArrayList<ArrayList<Float>>> createSegments(List<List<Double>> acc, int timeSteps) {
         final int N_FEATURES = 3;
-        ArrayList<float[][]> segments = new ArrayList<>();
-        for (int i = 0; i < acc.size() - timeSteps; i += stepDistance) {
-            float[][] segment = new float[timeSteps][N_FEATURES];
+        ArrayList<ArrayList<ArrayList<Float>>> segments = new ArrayList<>();
+        for (int i = 0; i < acc.size()-timeSteps ; i += timeSteps) {
+            ArrayList<ArrayList<Float>> segment = new ArrayList<>(N_FEATURES);
+            segment.add(new ArrayList<Float>(timeSteps));
+            segment.add(new ArrayList<Float>(timeSteps));
+            segment.add(new ArrayList<Float>(timeSteps));
             for (int j = 0; j < timeSteps; j++) {
-                segment[j][0] = acc.get(i + j).get(0).floatValue();
-                segment[j][1] = acc.get(i + j).get(1).floatValue();
-                segment[j][2] = acc.get(i + j).get(2).floatValue();
+//                System.out.println(Arrays.toString(acc.get(i+j).toArray()));
+                segment.get(0).add((acc.get(i + j).get(0).floatValue()));
+                segment.get(1).add((acc.get(i + j).get(1).floatValue()));
+                segment.get(2).add((acc.get(i + j).get(2).floatValue()));
             }
             segments.add(segment);
         }
         return segments;
     }
+
 
     public static int argmax(float[] array) {
         int index = 0;
@@ -186,66 +191,83 @@ public class StepServiceLocation extends Service implements SensorEventListener 
         }
         return index;
     }
+
+    public static int maxProb(int[] indeces){
+        Map<Integer, Integer> map = new HashMap<>();
+        for(int i = 0; i < indeces.length; i++) {
+            if(map.containsKey(indeces[i])) {
+                map.put(indeces[i], map.get(indeces[i])+1);
+            }
+            else {
+                map.put(indeces[i], 1);
+            }
+        }
+        int max = Integer.MIN_VALUE;
+        int maxIndex = -1;
+        for(Integer key: map.keySet()) {
+            if(map.get(key) > max) {
+                max = map.get(key);
+                maxIndex = key;
+            }
+        }
+        return maxIndex;
+    }
+
+
+
     public int onPassDataToJNIButtonClicked() throws IOException {
         // Temp data which passing to JNI
         String[] labels={"Downstairs", "Jogging", "Sitting", "Standing", "Upstairs", "Walking"};
         rmsSize=rms.size();
         AccSize+=rmsSize;
-        ArrayList<float[][]> x_new=createSegments(acc,128,32);
-        Toast.makeText(getApplicationContext(), String.valueOf(rmsSize), Toast.LENGTH_SHORT).show();
-        double[] tmpArray =new double[rmsSize];
-        for(int i =0; i<rmsSize ;i++){
-            tmpArray[i]=rms.get(i);
+        ArrayList<ArrayList<ArrayList<Float>>> x_new=createSegments(acc,200);
+        if (x_new.size()==0){
+            double[] tmpArray = new double[rms.size()];
+            for (int i = 0; i < tmpArray.length; i++) {
+                tmpArray[i] = rms.get(i);
+            }
+            rms.clear();
+            acc.clear();
+            return nativeLib.passingDataToJni(tmpArray,tmpArray.length,brand);
         }
-        rms.clear();
-        acc.clear();
-        int tmpInt = tmpArray.length;
+//        Toast.makeText(getApplicationContext(), String.valueOf(rmsSize), Toast.LENGTH_SHORT).show();
 
+//        rms.clear();
+        acc.clear();
+
+        ArrayList<Double> tempRms=new ArrayList<Double>();
 
         if(rmsSize>0) {
-            try {
-                Mistepcount model = Mistepcount.newInstance(getApplicationContext());
-                int[]y_classes = new int[x_new.size()];
-                // Creates inputs for reference.
-                // Convert X_train[0] to the correct shape and format
-                for (int i = 0; i < x_new.size(); i++) {
-                    TensorBuffer inputFeature0 = TensorBuffer.createFixedSize(new int[]{1, 128, 3}, DataType.FLOAT32);
-//                    inputFeature0.loadBuffer();
-                    float[][][] inputData = {x_new.get(i)};
-                    // Convert x_new to ByteBuffer
-                    int bytes = inputData.length * inputData[0].length * inputData[0][0].length * 4; // 4 bytes per float
-                    ByteBuffer byteBuffer = ByteBuffer.allocateDirect(bytes);
-                    byteBuffer.order(ByteOrder.nativeOrder());
-                    for (int a = 0; a < inputData.length; a++) {
-                        for (int j = 0; j < inputData[a].length; j++) {
-                            for (int k = 0; k < inputData[a][j].length; k++) {
-                                byteBuffer.putFloat(inputData[a][j][k]);
-                            }
-                        }
-                    }
-                    byteBuffer.rewind();
-
-                    // Load the ByteBuffer into inputFeature0
-                    inputFeature0.loadBuffer(byteBuffer);
-                    // Runs model inference and gets result.
-                    Mistepcount.Outputs outputs = model.process(inputFeature0);
-                    TensorBuffer outputFeature0 = outputs.getOutputFeature0AsTensorBuffer();
-                    // Find the index of the highest probability in the output data
-                    float[] outputData = outputFeature0.getFloatArray();
-                    int y_class = argmax(outputData);
-                    y_classes[i]=y_class;
-                }
-                System.out.println(Arrays.toString(y_classes));
-
-                // Releases model resources if no longer used.
-                model.close();
-            } catch (IOException e) {
-
-                Toast.makeText(getApplicationContext(), e.getMessage(), Toast.LENGTH_SHORT).show();
-                System.out.println(e.getMessage());
+            Toast.makeText(this, String.valueOf(x_new.size()), Toast.LENGTH_SHORT).show();
+            int[] y_classes=new int[x_new.size()];
+            for(int i =0;i<x_new.size();i++){
+                List<Float> data = new ArrayList<>();
+                data.addAll(x_new.get(i).get(0));
+                data.addAll(x_new.get(i).get(1));
+                data.addAll(x_new.get(i).get(2));
+                float [] results = classifier.predictProbabilities(toFloatArray(data));
+                y_classes[i]=argmax(results);
             }
+            Toast.makeText(this, Arrays.toString(y_classes), Toast.LENGTH_SHORT).show();
+            System.out.println("Rms: "+Arrays.toString(tempRms.toArray()));
+            System.out.println("Prediction: "+Arrays.toString(y_classes));
+//                System.out.println(labels[maxProb(y_classes)]);
+            Toast.makeText(getApplicationContext(),labels[maxProb(y_classes)],Toast.LENGTH_SHORT).show();
+            if(maxProb(y_classes)!=2 && maxProb(y_classes)!=3) {
+                double[] tmpArray = new double[rms.size()];
+                for (int i = 0; i < tmpArray.length; i++) {
+                    tmpArray[i] = rms.get(i);
+                }
+                rms.clear();
+                tempRms.clear();
+                int tmpInt = tmpArray.length;
 
-            return nativeLib.passingDataToJni(tmpArray, tmpInt, brand);
+
+                return nativeLib.passingDataToJni(tmpArray, tmpInt, brand);
+            }
+            else{
+                return 0;
+            }
         }
         else{
             return 0;
@@ -256,9 +278,10 @@ public class StepServiceLocation extends Service implements SensorEventListener 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        SensorManager sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+        SensorManager sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         sensorManager.unregisterListener(this);
         handler.removeCallbacksAndMessages(null);
+
     }
 
     @Override
@@ -287,6 +310,15 @@ public class StepServiceLocation extends Service implements SensorEventListener 
             rms.add(Double.parseDouble(df.format(rmsValue)));
         }
 
+    }
+    private float[] toFloatArray(List<Float> list) {
+        int i = 0;
+        float[] array = new float[list.size()];
+
+        for (Float f : list) {
+            array[i++] = (f != null ? f : Float.NaN);
+        }
+        return array;
     }
 
     @Override

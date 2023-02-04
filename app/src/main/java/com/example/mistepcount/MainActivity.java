@@ -17,11 +17,8 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.example.mistepcount.ml.Mistepcount;
 import com.google.android.gms.location.LocationCallback;
 
-import org.tensorflow.lite.DataType;
-import org.tensorflow.lite.support.tensorbuffer.TensorBuffer;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -46,12 +43,13 @@ public class MainActivity extends AppCompatActivity {
 
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        final boolean[] useLocation = {false};
-
+        final boolean[] useLocation = {true};
+        final SharedPreferences[] sp = new SharedPreferences[1];
+        final SharedPreferences[] loc = new SharedPreferences[1];
         TextView textView=findViewById(R.id.textView);
         Button button =findViewById(R.id.reset);
         Button locationButton =findViewById(R.id.button);
-        locationButton.setText("Enable Location");
+        locationButton.setText("Disable Location");
         if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
 //            useLocation[0]=false;
 //            locationButton.setText("Enable Location");
@@ -62,6 +60,15 @@ public class MainActivity extends AppCompatActivity {
 
 //
         if(!isMyServiceRunning(StepService.class) && !isMyServiceRunning(StepServiceLocation.class)){
+            int newSum=0;
+            try {
+                newSum= Integer.parseInt(sp[0].getString("sum","0"));
+                System.out.println(newSum+"gergegerg");
+                sum=newSum;
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            textView.setText("Steps: "+sum);
             if (useLocation[0]) {
                 locationButton.setText("Disable Location");
                 startService(new Intent(MainActivity.this,StepServiceLocation.class));
@@ -74,8 +81,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
         }
-        final SharedPreferences[] sp = new SharedPreferences[1];
-        final SharedPreferences[] loc = new SharedPreferences[1];
+
         loc[0]=getApplicationContext().getSharedPreferences("com.example.mistepcount.locationservice",Context.MODE_PRIVATE);
         if(useLocation[0]) {
             sp[0] = getApplicationContext().getSharedPreferences("com.example.mistepcount.stepservicelocation", Context.MODE_PRIVATE);

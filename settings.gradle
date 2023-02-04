@@ -2,14 +2,16 @@ pluginManagement {
     repositories {
         gradlePluginPortal()
         google()
-        mavenCentral()
+        mavenCentral()  // should be already there
+
     }
 }
 dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
         google()
-        mavenCentral()
+        mavenCentral() // should be already there
+
     }
 }
 rootProject.name = "MiStepCount"

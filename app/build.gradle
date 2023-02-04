@@ -1,7 +1,11 @@
 plugins {
     id 'com.android.application'
 }
-
+allprojects {
+    repositories {
+        jcenter()
+    }
+}
 android {
     compileSdk 32
     defaultConfig {
@@ -12,6 +16,9 @@ android {
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            abiFilters 'armeabi-v7a'
+        }
         externalNativeBuild {
             cmake {
                 cppFlags ''
@@ -39,24 +46,22 @@ android {
         viewBinding true
         mlModelBinding true
     }
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['libs']
+        }
+    }
 }
 
 dependencies {
 
-    implementation 'androidx.appcompat:appcompat:1.4.1'
-    implementation 'com.google.android.material:material:1.6.0'
+    implementation 'androidx.appcompat:appcompat:1.4.0'
+    implementation 'com.google.android.material:material:1.7.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-    implementation 'com.google.android.gms:play-services-location:17.0.0'
-    implementation 'org.tensorflow:tensorflow-lite-support:0.4.3'
-    implementation 'org.tensorflow:tensorflow-lite-metadata:0.4.3'
-    testImplementation 'junit:junit:4.+'
-//    implementation 'org.tensorflow:tensorflow-lite-delegate'
-//    implementation 'org.tensorflow:tensorflow-lite-gpu:0.0.0-nightly'
-
-    implementation 'org.tensorflow:tensorflow-lite:2.4.0'
-    implementation 'org.tensorflow:tensorflow-lite-select-tf-ops:2.4.0'
-    implementation 'org.tensorflow:tensorflow-lite-gpu:2.4.0'
-//    implementation 'org.tensorflow:tensorflow-lite-delegate:2.4.0'
-    androidTestImplementation 'androidx.test.ext:junit:1.1.4'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.0'
+    implementation 'com.google.android.gms:play-services-location:21.0.1'
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+    androidTestImplementation 'com.android.support.test.espresso:espresso-contrib:3.0.2'
+    testImplementation 'junit:junit:4.13.2'
 }
