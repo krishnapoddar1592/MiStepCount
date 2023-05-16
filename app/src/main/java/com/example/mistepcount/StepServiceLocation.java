@@ -73,32 +73,12 @@ public class StepServiceLocation extends Service implements SensorEventListener 
     int rmsSize = 0;
     int AccSize = 0;
     private TensorFlowClassifier classifier;
-
-
     /**
      * Native Library Object
      */
     private NativeLibraryLoc nativeLib;
+    private NativeLibraryModel nativeModel;
     FusedLocationProviderClient fusedLocationProviderClient;
-
-
-
-    private static Double distance(Location one, Location two) {
-        int R = 6371000;
-        Double dLat = toRad(two.getLatitude() - one.getLatitude());
-        Double dLon = toRad(two.getLongitude() - one.getLongitude());
-        Double lat1 = toRad(one.getLatitude());
-        Double lat2 = toRad(two.getLatitude());
-        Double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
-                + Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
-        Double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        Double d = R * c;
-        return d;
-    }
-
-    private static double toRad(Double d) {
-        return d * Math.PI / 180;
-    }
 
     @Nullable
     @Override
@@ -134,6 +114,7 @@ public class StepServiceLocation extends Service implements SensorEventListener 
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         sensorManager.registerListener((SensorEventListener) StepServiceLocation.this, accelerometer, SensorManager.SENSOR_DELAY_GAME);
         nativeLib = new NativeLibraryLoc();
+        nativeModel=new NativeLibraryModel();
         handler = new Handler();
         final int delay = 20000; // 1000 milliseconds == 1 second
         handler.postDelayed(new Runnable() {
@@ -178,6 +159,38 @@ public class StepServiceLocation extends Service implements SensorEventListener 
         }
         return segments;
     }
+    public static void print2DArray(double[][] array) {
+        for(int i=0; i<array.length; i++) {
+            for(int j=0; j<array[i].length; j++) {
+                System.out.print(array[i][j] + " ");
+            }
+            System.out.println();
+        }
+    }
+
+    public double[][] createSegmentsArray(List<List<Double>> acc) {
+        final int N_FEATURES = 10;
+        ArrayList<ArrayList<Double>> segments = new ArrayList<>();
+        for (int i = 0; i < acc.size() - N_FEATURES-1; i += N_FEATURES) {
+            ArrayList<Double> segment = new ArrayList<>();
+            for (int j = 0; j < N_FEATURES; j++) {
+                float ax = acc.get(i + j).get(0).floatValue();
+                float ay = acc.get(i + j).get(1).floatValue();
+                float az = acc.get(i + j).get(2).floatValue();
+                double rms = Math.pow((Math.pow(ax, 2) + Math.pow(ay, 2) + Math.pow(az, 2)) / 3, 0.5);
+                segment.add(rms);
+            }
+            segments.add(segment);
+        }
+        double[][] segmentsArray = new double[segments.size()][N_FEATURES];
+        for (int i = 0; i < segments.size(); i++) {
+            for (int j = 0; j < N_FEATURES; j++) {
+                segmentsArray[i][j] = segments.get(i).get(j);
+            }
+        }
+        return segmentsArray;
+    }
+
 
 
     public static int argmax(float[] array) {
@@ -221,6 +234,8 @@ public class StepServiceLocation extends Service implements SensorEventListener 
         rmsSize=rms.size();
         AccSize+=rmsSize;
         ArrayList<ArrayList<ArrayList<Float>>> x_new=createSegments(acc,200);
+        double[][] rmsNew=createSegmentsArray(acc);
+        print2DArray(rmsNew);
         if (x_new.size()==0){
             double[] tmpArray = new double[rms.size()];
             for (int i = 0; i < tmpArray.length; i++) {
@@ -240,6 +255,13 @@ public class StepServiceLocation extends Service implements SensorEventListener 
         if(rmsSize>0) {
             Toast.makeText(this, String.valueOf(x_new.size()), Toast.LENGTH_SHORT).show();
             int[] y_classes=new int[x_new.size()];
+            int[] y_classes2=new int[rmsNew.length];
+            for(int i =0; i<rmsNew.length;i++){
+                System.out.println(Arrays.toString(rmsNew[i])
+                );
+                y_classes2[i]=nativeModel.passingDataToJni(rmsNew[i],1,2);
+            }
+
             for(int i =0;i<x_new.size();i++){
                 List<Float> data = new ArrayList<>();
                 data.addAll(x_new.get(i).get(0));
@@ -248,9 +270,10 @@ public class StepServiceLocation extends Service implements SensorEventListener 
                 float [] results = classifier.predictProbabilities(toFloatArray(data));
                 y_classes[i]=argmax(results);
             }
-            Toast.makeText(this, Arrays.toString(y_classes), Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, Arrays.toString(y_classes2), Toast.LENGTH_SHORT).show();
             System.out.println("Rms: "+Arrays.toString(tempRms.toArray()));
-            System.out.println("Prediction: "+Arrays.toString(y_classes));
+//            System.out.println("Prediction: "+Arrays.toString(y_classes));
+//            System.out.println("Prediction: "+Arrays.toString(y_classes2));
 //                System.out.println(labels[maxProb(y_classes)]);
             Toast.makeText(getApplicationContext(),labels[maxProb(y_classes)],Toast.LENGTH_SHORT).show();
             if(maxProb(y_classes)!=2 && maxProb(y_classes)!=3) {

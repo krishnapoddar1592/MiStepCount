@@ -32,6 +32,15 @@ add_library(
         # Provides a relative path to your source file(s).
         native-lib-loc.cpp
 )
+add_library(
+        native-lib-model
+
+        # Sets the library as a shared library.
+        SHARED
+
+        # Provides a relative path to your source file(s).
+        native-lib-model.cpp
+)
 # Searches for a specified prebuilt library and stores the path as a
 # variable. Because CMake includes system libraries in the search path by
 # default, you only need to specify the name of the public NDK library
@@ -57,6 +66,13 @@ target_link_libraries( # Specifies the target library.
         ${log-lib})
 target_link_libraries(
         native-lib-loc
+
+        # Links the target library to the log library
+        # included in the NDK.
+        ${log-lib}
+)
+target_link_libraries(
+        native-lib-model
 
         # Links the target library to the log library
         # included in the NDK.
